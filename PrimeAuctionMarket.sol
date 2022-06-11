@@ -36,6 +36,7 @@ contract PrimeAuctionMarket is Ownable {
     }
 
     mapping(uint => Auction) public auctions;
+
     uint numAuctions;
 
     constructor () {        
@@ -66,7 +67,7 @@ contract PrimeAuctionMarket is Ownable {
 
     //bid for token during the duration of the auction. bid must be greater than the highest bid
     // seller cannot bid    
-    function bid(uint _auctionId) external payable canBid(_auctionId) {
+    function bid(uint _auctionId) external payable checkAuctionId(_auctionId) canBid(_auctionId) {
         Auction storage auction = auctions[_auctionId];
         address initialHighestBidder = auction.highestBidder;
         uint initialHighestBid = auction.highestBid;
@@ -80,7 +81,7 @@ contract PrimeAuctionMarket is Ownable {
     }
 
     //people who took part in the bid without winning can withdraw their money
-    function withdrawBids(uint _auctionId) external canWithdraw(_auctionId) {
+    function withdrawBids(uint _auctionId) external checkAuctionId(_auctionId) canWithdraw(_auctionId) {
         Auction storage auction = auctions[_auctionId];
         uint bal = auction.bids[msg.sender];
         auction.bids[msg.sender] = 0;
@@ -90,7 +91,7 @@ contract PrimeAuctionMarket is Ownable {
     }
 
    //seller can end the auction and send token to winner, if no bid s/he gets their token back
-    function endAuctionAsSeller(uint _auctionId) external canEndAuction(_auctionId) returns (bool) {
+    function endAuctionAsSeller(uint _auctionId) external checkAuctionId(_auctionId) canEndAuction(_auctionId) returns (bool) {
         (bool success, address nftContractAddress, uint tokenId, address winner, uint amount) = endAuction(_auctionId);
         if (success) {
             emit End(nftContractAddress, tokenId, winner, amount, true, false);
@@ -100,7 +101,7 @@ contract PrimeAuctionMarket is Ownable {
     }
 
     //winner can claim the token and end the auction (seller gets the money for sales)
-    function claimTokenAsWinner(uint _auctionId) external canClaimWinner(_auctionId) returns (bool) {
+    function claimTokenAsWinner(uint _auctionId) external checkAuctionId(_auctionId) canClaimWinner(_auctionId) returns (bool) {
         (bool success, address nftContractAddress, uint tokenId, address winner, uint amount) = endAuction(_auctionId);
         if (success) {
             emit End(nftContractAddress, tokenId, winner, amount, false, true);
@@ -110,7 +111,7 @@ contract PrimeAuctionMarket is Ownable {
     }
 
  
-    function endAuction(uint _auctionId) internal returns (bool success, address nftContractAddress, uint tokenId, address winner, uint amount){
+    function endAuction(uint _auctionId) internal checkAuctionId(_auctionId) returns (bool success, address nftContractAddress, uint tokenId, address winner, uint amount){
         Auction storage auction = auctions[_auctionId];
         auction.ended = true;
         if (auction.highestBidder != address(0)) {
@@ -149,9 +150,9 @@ contract PrimeAuctionMarket is Ownable {
    
 
     modifier canAuctionToken(address _nftAdd, uint _nftId, uint _startingPrice, uint _auctionDays){
-        require(msg.value >= getPlatformPrice(), "Attach platform fee of 5_00_000 wei");
-        bool callerIsTokenOwner =  IERC721(_nftAdd).ownerOf(_nftId) == msg.sender ? true
-                                                            : false;
+        require(msg.value == getPlatformPrice(), "Attach platform fee of 5_00_000 wei");
+        require(_nftAdd != address(0), "Enter a valid NFT contract address");
+        bool callerIsTokenOwner =  IERC721(_nftAdd).ownerOf(_nftId) == msg.sender ? true : false;
         require(callerIsTokenOwner, "You can only list tokens owned by you");        
         require(_startingPrice > 0, "Starting price must be greater than 0");
         require(_auctionDays > 0 && _auctionDays <60, "auction duration should be between 1 and 60 days");
@@ -164,6 +165,7 @@ contract PrimeAuctionMarket is Ownable {
         require( !auction.ended && (block.timestamp < auction.endAt), "auction has ended");
         require(msg.value > auction.highestBid, "Bid must be greater than the current highest bid");
         require(msg.sender != auction.seller, "owner cannot place a bid");
+        require(msg.sender != auction.highestBidder, "you can't outbid yourself");
         _;
     }
 
@@ -173,4 +175,11 @@ contract PrimeAuctionMarket is Ownable {
         require(auction.bids[msg.sender]> 0, "Nothing to withdraw");
         _;
     }
+
+    modifier checkAuctionId(uint _auctionId){
+        require(_auctionId >= 0 && _auctionId < numAuctions, "Enter a valid auction id");
+        _;
+    }
+
+
 }
