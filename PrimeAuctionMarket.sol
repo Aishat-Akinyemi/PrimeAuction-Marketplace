@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.3;
+pragma solidity ^0.8.12;
 
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
@@ -115,14 +116,14 @@ contract PrimeAuctionMarket is Ownable {
         auction.ended = true;
         if (auction.highestBidder != address(0)) {
             IERC721(auction.nftContractAddress).transferFrom(address(this), auction.highestBidder, auction.tokenId);
-            (bool sent, ) = payable(msg.sender).call{value: auction.highestBid}("");
+            (bool sent, ) = payable(auction.seller).call{value: auction.highestBid}("");
             require(sent, "Could not end auction");
             return (true, auction.nftContractAddress, auction.tokenId,  auction.highestBidder, auction.highestBid);
         } else {
             IERC721(auction.nftContractAddress).transferFrom(address(this), auction.seller, auction.tokenId);
             return (true, auction.nftContractAddress, auction.tokenId, address(0), 0);
         }
-    }
+    }  
 
 
     //pure function that returns the constant platform price 500_000 wei
@@ -162,6 +163,8 @@ contract PrimeAuctionMarket is Ownable {
     modifier canBid(uint _auctionId){        
         Auction storage auction = auctions[_auctionId];
         require( !auction.ended && (block.timestamp < auction.endAt), "auction has ended");
+        string memory price_error_msg = string.concat("Bid must not be smaller than the startting price: ", Strings.toString(auction.startingPrice));
+        require(msg.value >= auction.startingPrice, price_error_msg);
         require(msg.value > auction.highestBid, "Bid must be greater than the current highest bid");
         require(msg.sender != auction.seller, "owner cannot place a bid");
         _;
